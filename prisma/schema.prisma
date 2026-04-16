@@ -15,6 +15,7 @@ enum Role {
 enum SubmissionStatus {
   PENDING
   GRADED
+  PLAGIARIZED
 }
 
 enum VivaQuestionType {
@@ -23,20 +24,24 @@ enum VivaQuestionType {
 }
 
 model User {
-  id            String       @id @default(cuid())
-  name          String?
-  email         String?      @unique
-  password      String?
-  role          Role         @default(STUDENT)
-  createdAt     DateTime     @default(now())
-  courses       Course[]     @relation("TeacherCourses")
-  enrollments   Enrollment[]
-  submissions   Submission[]
+  id                 String         @id @default(cuid())
+  name               String?
+  email              String?        @unique
+  password           String?
+  role               Role           @default(STUDENT)
+  onboardingComplete Boolean        @default(false)
+  createdAt          DateTime       @default(now())
+  courses            Course[]       @relation("TeacherCourses")
+  enrollments        Enrollment[]
+  submissions        Submission[]
+  notifications      Notification[]
+  peerReviews        PeerReview[]   @relation("Reviewer")
 }
 
 model Course {
   id          String       @id @default(cuid())
   title       String
+  description String?
   teacherId   String
   teacher     User         @relation("TeacherCourses", fields: [teacherId], references: [id])
   createdAt   DateTime     @default(now())
@@ -56,17 +61,25 @@ model Enrollment {
 }
 
 model Assignment {
-  id          String     @id @default(cuid())
-  title       String
-  description String
-  starterCode String
-  language    String     @default("python")
-  deadline    DateTime
-  courseId     String
-  course      Course     @relation(fields: [courseId], references: [id])
-  testCases   TestCase[]
-  submissions Submission[]
-  createdAt   DateTime   @default(now())
+  id                 String                @id @default(cuid())
+  title              String
+  description        String
+  starterCode        String
+  language           String                @default("python")
+  difficulty         String?
+  hints              Json?
+  peerReviewEnabled  Boolean               @default(false)
+  isRemedial         Boolean               @default(false)
+  parentAssignmentId String?
+  parentAssignment   Assignment?           @relation("RemedialOf", fields: [parentAssignmentId], references: [id])
+  remedialVersions   Assignment[]          @relation("RemedialOf")
+  deadline           DateTime
+  courseId            String
+  course             Course                @relation(fields: [courseId], references: [id])
+  testCases          TestCase[]
+  submissions        Submission[]
+  peerReviewConfig   PeerReviewAssignment?
+  createdAt          DateTime              @default(now())
 }
 
 model TestCase {
@@ -79,24 +92,27 @@ model TestCase {
 }
 
 model Submission {
-  id           String           @id @default(cuid())
-  studentId    String
-  student      User             @relation(fields: [studentId], references: [id])
-  assignmentId String
-  assignment   Assignment       @relation(fields: [assignmentId], references: [id])
-  code         String
-  language     String           @default("python")
-  score        Float?
-  vivaScore    Float?
-  finalScore   Float?
-  manualScore  Float?
-  manualNote   String?
-  testResults  Json?
-  flags        Json?
-  status       SubmissionStatus @default(PENDING)
-  submittedAt  DateTime         @default(now())
-  vivaQuestions VivaQuestion[]
-  vivaResponses VivaResponse[]
+  id              String           @id @default(cuid())
+  studentId       String
+  student         User             @relation(fields: [studentId], references: [id])
+  assignmentId    String
+  assignment      Assignment       @relation(fields: [assignmentId], references: [id])
+  code            String
+  language        String           @default("python")
+  score           Float?
+  vivaScore       Float?
+  peerScore       Float?
+  finalScore      Float?
+  manualScore     Float?
+  manualNote      String?
+  testResults     Json?
+  flags           Json?
+  plagiarismFlags Json?
+  status          SubmissionStatus @default(PENDING)
+  submittedAt     DateTime         @default(now())
+  vivaQuestions   VivaQuestion[]
+  vivaResponses   VivaResponse[]
+  peerReviews     PeerReview[]
 }
 
 model VivaQuestion {
@@ -121,4 +137,45 @@ model VivaResponse {
   isCorrect      Boolean
   aiScore        Int?
   aiFeedback     String?
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  type      String
+  message   String
+  read      Boolean  @default(false)
+  metadata  Json?
+  createdAt DateTime @default(now())
+}
+
+model PeerReviewAssignment {
+  id           String     @id @default(cuid())
+  assignmentId String     @unique
+  assignment   Assignment @relation(fields: [assignmentId], references: [id])
+  rubric       Json
+}
+
+model PeerReview {
+  id           String     @id @default(cuid())
+  reviewerId   String
+  reviewer     User       @relation("Reviewer", fields: [reviewerId], references: [id])
+  submissionId String
+  submission   Submission @relation(fields: [submissionId], references: [id])
+  scores       Json?
+  comments     String?
+  completedAt  DateTime?
+
+  @@unique([reviewerId, submissionId])
+}
+
+model ConceptCache {
+  id         String   @id @default(cuid())
+  userId     String
+  concept    String
+  suggestion String
+  cachedAt   DateTime @default(now())
+
+  @@unique([userId, concept])
 }
