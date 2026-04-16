@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/Providers";
@@ -7,11 +7,14 @@ import PWALoader from "@/components/PWALoader";
 
 const inter = Inter({ subsets: ["latin"] });
 
+export const viewport: Viewport = {
+  themeColor: "#6366f1",
+};
+
 export const metadata: Metadata = {
   title: "AI Coding Classroom",
   description: "Learn to code with AI guidance",
   manifest: "/manifest.json",
-  themeColor: "#6366f1",
 };
 
 export default function RootLayout({
