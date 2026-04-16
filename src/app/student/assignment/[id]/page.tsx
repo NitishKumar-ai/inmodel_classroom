@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import CodeEditor from "@/components/CodeEditor";
 import { useParams, useRouter } from "next/navigation";
+import OfflineBanner from "@/components/OfflineBanner";
 
 interface Assignment {
   id: string;
@@ -124,6 +125,7 @@ export default function AssignmentDetailPage() {
 
   return (
     <div className="space-y-6">
+      <OfflineBanner />
       {/* Header */}
       <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
         <h1 className="text-2xl font-bold text-slate-900">{assignment.title}</h1>

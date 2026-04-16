@@ -37,10 +37,11 @@ function deadlineCountdown(deadline: Date): string {
 
 export default async function StudentDashboard() {
   const session = await getServerSession(authOptions);
+  const userId = session?.user.id;
 
   // Fetch enrolled courses with assignments
   const enrollments = await prisma.enrollment.findMany({
-    where: { userId: session?.user.id },
+    where: { userId },
     include: {
       course: {
         include: {
@@ -54,9 +55,21 @@ export default async function StudentDashboard() {
 
   // Fetch student's submissions
   const submissions = await prisma.submission.findMany({
-    where: { studentId: session?.user.id },
+    where: { studentId: userId },
     include: { vivaResponses: true },
     orderBy: { submittedAt: "desc" },
+  });
+
+  // Fetch pending peer reviews
+  const peerReviews = await prisma.peerReview.findMany({
+    where: { reviewerId: userId, completedAt: null },
+    include: {
+      submission: {
+        include: {
+          assignment: { select: { title: true, courseId: true } },
+        },
+      },
+    },
   });
 
   // Build a map: assignmentId -> latest submission
@@ -76,13 +89,52 @@ export default async function StudentDashboard() {
 
   return (
     <div className="space-y-8">
-      <h1 className="text-3xl font-bold text-slate-900">Student Dashboard</h1>
+      <div className="flex justify-between items-center">
+        <h1 className="text-3xl font-bold text-slate-900">Student Dashboard</h1>
+        <Link
+          href="/student/progress"
+          className="flex items-center gap-2 bg-indigo-50 text-indigo-700 px-4 py-2 rounded-xl font-bold hover:bg-indigo-100 transition border border-indigo-100 shadow-sm"
+        >
+          <span>📈</span> View My Progress
+        </Link>
+      </div>
+
+      {/* Peer Reviews section */}
+      {peerReviews.length > 0 && (
+        <section className="bg-indigo-600 p-6 rounded-2xl text-white shadow-xl shadow-indigo-100">
+          <div className="flex items-center gap-2 mb-4">
+            <span className="text-2xl">👥</span>
+            <h2 className="text-xl font-bold">Pending Peer Reviews</h2>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {peerReviews.map((review) => (
+              <Link
+                key={review.id}
+                href={`/student/peer-review/${review.id}`}
+                className="bg-white/10 hover:bg-white/20 border border-white/20 p-4 rounded-xl transition backdrop-blur-sm group"
+              >
+                <div className="flex justify-between items-center">
+                  <div>
+                    <h3 className="font-bold text-white group-hover:text-indigo-100">
+                      {review.submission.assignment.title}
+                    </h3>
+                    <p className="text-xs text-indigo-200">Help a peer move forward</p>
+                  </div>
+                  <span className="bg-white text-indigo-600 text-[10px] font-black px-2 py-1 rounded shadow-sm uppercase tracking-wider">
+                    Start Review
+                  </span>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Pending Assignments */}
       <section>
         <h2 className="text-xl font-semibold text-slate-800 mb-4 flex items-center gap-2">
           <span className="w-2 h-2 bg-amber-500 rounded-full" />
-          Pending Assignments
+          Assignments to Complete
           {pending.length > 0 && (
             <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-bold">
               {pending.length}
@@ -97,31 +149,31 @@ export default async function StudentDashboard() {
                 <Link
                   key={assignment.id}
                   href={isPastDue ? "#" : `/student/assignment/${assignment.id}`}
-                  className={`block bg-white p-5 rounded-xl border shadow-sm transition group ${
+                  className={`block bg-white p-6 rounded-2xl border shadow-sm transition group ${
                     isPastDue
-                      ? "border-red-200 opacity-60 cursor-not-allowed"
-                      : "border-slate-200 hover:border-indigo-300 hover:shadow-md"
+                      ? "border-red-100 bg-red-50/30 opacity-60 cursor-not-allowed"
+                      : "border-slate-100 hover:border-indigo-300 hover:shadow-lg hover:-translate-y-1"
                   }`}
                 >
                   <div className="flex justify-between items-start">
                     <div>
-                      <p className="text-xs text-slate-400 mb-1">{assignment.courseTitle}</p>
-                      <h3 className="font-bold text-slate-800 group-hover:text-indigo-600 transition">
+                      <p className="text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-widest">{assignment.courseTitle}</p>
+                      <h3 className="font-bold text-slate-800 group-hover:text-indigo-600 transition text-lg">
                         {assignment.title}
                       </h3>
                     </div>
-                    <span className={`text-xs font-semibold px-2 py-1 rounded ${
-                      isPastDue ? "bg-red-50 text-red-600" : "bg-amber-50 text-amber-600"
+                    <span className={`text-[10px] font-black px-2 py-1 rounded-lg shadow-sm border ${
+                      isPastDue ? "bg-red-50 text-red-600 border-red-100" : "bg-amber-50 text-amber-600 border-amber-100"
                     }`}>
-                      {isPastDue ? "Past due" : deadlineCountdown(new Date(assignment.deadline))}
+                      {isPastDue ? "PAST DUE" : deadlineCountdown(new Date(assignment.deadline)).toUpperCase()}
                     </span>
                   </div>
                 </Link>
               );
             })
           ) : (
-            <div className="col-span-full py-8 text-center bg-white rounded-xl border border-slate-200 text-slate-400">
-              {enrollments.length === 0 ? "You are not enrolled in any courses yet." : "All caught up! No pending assignments."}
+            <div className="col-span-full py-12 text-center bg-white rounded-2xl border border-dashed border-slate-200 text-slate-400 font-medium">
+              {enrollments.length === 0 ? "You are not enrolled in any courses yet." : "All caught up! ✨ No pending assignments."}
             </div>
           )}
         </div>
@@ -131,9 +183,9 @@ export default async function StudentDashboard() {
       <section>
         <h2 className="text-xl font-semibold text-slate-800 mb-4 flex items-center gap-2">
           <span className="w-2 h-2 bg-indigo-500 rounded-full" />
-          Submitted
+          Submission History
         </h2>
-        <div className="space-y-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {submitted.length > 0 ? (
             submitted.map((assignment) => {
               const sub = submissionMap.get(assignment.id)!;
@@ -143,44 +195,48 @@ export default async function StudentDashboard() {
               return (
                 <div
                   key={assignment.id}
-                  className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between"
+                  className="bg-white p-6 rounded-2xl border border-slate-100 shadow-xl shadow-slate-100/50 flex flex-col justify-between"
                 >
                   <div>
-                    <p className="text-xs text-slate-400 mb-0.5">{assignment.courseTitle}</p>
-                    <h3 className="font-bold text-slate-800">{assignment.title}</h3>
-                    <div className="flex items-center gap-3 mt-2">
+                    <div className="flex justify-between items-start mb-2">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{assignment.courseTitle}</p>
                       <StatusPill status={sub.status} hasViva={hasVivaResponses} />
-                      {sub.score !== null && (
-                        <span className="text-xs text-slate-500">
-                          Code: <ScoreBadge score={sub.score} />
-                        </span>
-                      )}
-                      {sub.vivaScore !== null && (
-                        <span className="text-xs text-slate-500">
-                          Viva: <ScoreBadge score={sub.vivaScore} />
-                        </span>
-                      )}
-                      {sub.finalScore !== null && (
-                        <span className="text-xs text-slate-500">
-                          Final: <ScoreBadge score={sub.finalScore} />
-                        </span>
-                      )}
+                    </div>
+                    <h3 className="font-bold text-slate-800 text-lg mb-4">{assignment.title}</h3>
+                    
+                    <div className="grid grid-cols-2 gap-3 mb-6">
+                      <div className="bg-slate-50 p-2 rounded-xl text-center">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Code</p>
+                        <ScoreBadge score={sub.score} />
+                      </div>
+                      <div className="bg-slate-50 p-2 rounded-xl text-center">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Viva</p>
+                        <ScoreBadge score={sub.vivaScore} />
+                      </div>
+                      <div className="bg-slate-50 p-2 rounded-xl text-center">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Peer</p>
+                        <ScoreBadge score={sub.peerScore} />
+                      </div>
+                      <div className="bg-indigo-50 p-2 rounded-xl text-center border border-indigo-100">
+                        <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-tighter">Final</p>
+                        <ScoreBadge score={sub.finalScore} />
+                      </div>
                     </div>
                   </div>
 
                   {vivaNeeded && (
                     <Link
                       href={`/student/viva/${sub.id}`}
-                      className="px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 transition animate-pulse"
+                      className="w-full text-center py-3 bg-indigo-600 text-white text-sm font-black rounded-xl hover:bg-indigo-700 transition shadow-lg shadow-indigo-100 animate-pulse"
                     >
-                      Complete Viva →
+                      COMPLETE VIVA →
                     </Link>
                   )}
                 </div>
               );
             })
           ) : (
-            <div className="py-8 text-center bg-white rounded-xl border border-slate-200 text-slate-400">
+            <div className="col-span-full py-12 text-center bg-white rounded-2xl border border-slate-100 text-slate-400 font-medium">
               No submissions yet.
             </div>
           )}
@@ -191,13 +247,13 @@ export default async function StudentDashboard() {
       <section>
         <h2 className="text-xl font-semibold text-slate-800 mb-4 flex items-center gap-2">
           <span className="w-2 h-2 bg-slate-400 rounded-full" />
-          My Courses
+          Enrolled Courses
         </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="flex flex-wrap gap-4">
           {enrollments.map((en) => (
-            <div key={en.id} className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-              <h3 className="font-bold text-slate-800">{en.course.title}</h3>
-              <p className="text-sm text-slate-500 mt-1">{en.course.assignments.length} assignments</p>
+            <div key={en.id} className="bg-slate-50 border border-slate-100 px-6 py-4 rounded-2xl flex flex-col items-center">
+              <h3 className="font-extrabold text-slate-800 tracking-tight">{en.course.title}</h3>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">{en.course.assignments.length} Assignments</p>
             </div>
           ))}
         </div>
