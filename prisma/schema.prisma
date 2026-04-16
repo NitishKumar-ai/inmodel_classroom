@@ -1,0 +1,113 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  STUDENT
+  TEACHER
+}
+
+enum SubmissionStatus {
+  PENDING
+  GRADED
+}
+
+enum VivaQuestionType {
+  MCQ
+  SHORT_ANSWER
+}
+
+model User {
+  id            String       @id @default(cuid())
+  name          String?
+  email         String?      @unique
+  password      String?
+  role          Role         @default(STUDENT)
+  createdAt     DateTime     @default(now())
+  courses       Course[]     @relation("TeacherCourses")
+  enrollments   Enrollment[]
+  submissions   Submission[]
+}
+
+model Course {
+  id          String       @id @default(cuid())
+  title       String
+  teacherId   String
+  teacher     User         @relation("TeacherCourses", fields: [teacherId], references: [id])
+  createdAt   DateTime     @default(now())
+  enrollments Enrollment[]
+  assignments Assignment[]
+}
+
+model Enrollment {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  courseId  String
+  course    Course   @relation(fields: [courseId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([userId, courseId])
+}
+
+model Assignment {
+  id          String     @id @default(cuid())
+  title       String
+  description String
+  starterCode String
+  deadline    DateTime
+  courseId    String
+  course      Course     @relation(fields: [courseId], references: [id])
+  testCases   TestCase[]
+  submissions Submission[]
+  createdAt   DateTime   @default(now())
+}
+
+model TestCase {
+  id             String     @id @default(cuid())
+  assignmentId   String
+  assignment     Assignment @relation(fields: [assignmentId], references: [id])
+  input          String
+  expectedOutput String
+  isHidden       Boolean    @default(false)
+}
+
+model Submission {
+  id           String           @id @default(cuid())
+  studentId    String
+  student      User             @relation(fields: [studentId], references: [id])
+  assignmentId String
+  assignment   Assignment       @relation(fields: [assignmentId], references: [id])
+  code         String
+  score        Float?
+  status       SubmissionStatus @default(PENDING)
+  submittedAt  DateTime         @default(now())
+  vivaQuestions VivaQuestion[]
+  vivaResponses VivaResponse[]
+}
+
+model VivaQuestion {
+  id            String           @id @default(cuid())
+  submissionId  String
+  submission    Submission       @relation(fields: [submissionId], references: [id])
+  question      String
+  type          VivaQuestionType
+  options       Json?            // For MCQ
+  correctAnswer String
+  responses     VivaResponse[]
+}
+
+model VivaResponse {
+  id             String       @id @default(cuid())
+  vivaQuestionId String
+  vivaQuestion   VivaQuestion @relation(fields: [vivaQuestionId], references: [id])
+  submissionId   String
+  submission     Submission   @relation(fields: [submissionId], references: [id])
+  studentAnswer  String
+  isCorrect      Boolean
+}
