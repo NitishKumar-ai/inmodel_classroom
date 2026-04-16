@@ -1,15 +1,11 @@
 import { NextResponse } from "next/server";
+import { submitCode, LANGUAGE_MAP } from "@/lib/judge0";
 
 export async function POST(req: Request) {
-  const { code, language, input } = await req.json();
+  const { code, language, stdin } = await req.json();
 
-  // Placeholder echo implementation
-  // Future: Integrate Judge0 or Piston API here
-  
-  const output = `Executed ${language} code with input: "${input || "none"}".\n\nCode Preview:\n${code.substring(0, 50)}...`;
+  const lang = LANGUAGE_MAP[language] || LANGUAGE_MAP.python;
+  const result = await submitCode(code, lang.id, stdin || "");
 
-  return NextResponse.json({
-    output,
-    error: null,
-  });
+  return NextResponse.json(result);
 }
