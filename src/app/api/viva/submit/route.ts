@@ -9,25 +9,40 @@ export async function POST(req: Request) {
 
   const { submissionId, responses } = await req.json();
 
-  // responses is an array of { vivaQuestionId, studentAnswer }
+  // Validate submission belongs to user
+  const submission = await prisma.submission.findUnique({
+    where: { id: submissionId },
+  });
+
+  if (!submission || submission.studentId !== session.user.id) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  // Save each response
   const results = await Promise.all(
-    responses.map(async (res: { vivaQuestionId: string; studentAnswer: string }) => {
-      const question = await prisma.vivaQuestion.findUnique({
-        where: { id: res.vivaQuestionId },
-      });
+    (responses as { vivaQuestionId: string; studentAnswer: string }[]).map(
+      async (res) => {
+        const question = await prisma.vivaQuestion.findUnique({
+          where: { id: res.vivaQuestionId },
+        });
 
-      const isCorrect = question?.correctAnswer === res.studentAnswer;
+        // For MCQ, check correctness immediately
+        const isCorrect =
+          question?.type === "MCQ"
+            ? question.correctAnswer.trim() === res.studentAnswer.trim()
+            : false; // SHORT_ANSWER scored later by AI
 
-      return prisma.vivaResponse.create({
-        data: {
-          submissionId,
-          vivaQuestionId: res.vivaQuestionId,
-          studentAnswer: res.studentAnswer,
-          isCorrect,
-        },
-      });
-    })
+        return prisma.vivaResponse.create({
+          data: {
+            submissionId,
+            vivaQuestionId: res.vivaQuestionId,
+            studentAnswer: res.studentAnswer,
+            isCorrect,
+          },
+        });
+      }
+    )
   );
 
-  return NextResponse.json(results);
+  return NextResponse.json({ message: "Viva submitted", count: results.length });
 }

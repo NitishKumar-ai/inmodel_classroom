@@ -2,12 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
-
-/*
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY || "stub-key",
-});
-*/
+import { generateVivaQuestions } from "@/lib/claude";
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
@@ -20,37 +15,40 @@ export async function POST(req: Request) {
     include: { assignment: true },
   });
 
-  if (!submission) return NextResponse.json({ error: "Submission not found" }, { status: 404 });
+  if (!submission) {
+    return NextResponse.json({ error: "Submission not found" }, { status: 404 });
+  }
 
-  // Stub Claude API call
-  console.log("Generating viva for code:", submission.code);
-  
-  /* 
-  const response = await anthropic.messages.create({
-    model: "claude-3-5-sonnet-20241022",
-    max_tokens: 1024,
-    messages: [{ role: "user", content: `Generate 3 viva questions for this code: ${submission.code}` }],
+  // Parse test results for Claude context
+  const testResults = (submission.testResults as Array<{ passed: boolean; status: string }>) || [];
+
+  // Generate questions via Claude
+  const questions = await generateVivaQuestions(
+    submission.assignment.title,
+    submission.assignment.description,
+    submission.code,
+    testResults
+  );
+
+  // Save to database
+  const created = await Promise.all(
+    questions.map((q) =>
+      prisma.vivaQuestion.create({
+        data: {
+          submissionId,
+          question: q.question,
+          type: q.type,
+          options: q.options || undefined,
+          correctAnswer: q.correctAnswer,
+          conceptTested: q.conceptTested,
+        },
+      })
+    )
+  );
+
+  return NextResponse.json({
+    message: "Viva questions generated",
+    count: created.length,
+    questions: created,
   });
-  */
-
-  // Create placeholder questions
-  await prisma.vivaQuestion.createMany({
-    data: [
-      {
-        submissionId,
-        question: "What is the time complexity of your solution?",
-        type: "MCQ",
-        options: ["O(1)", "O(n)", "O(log n)", "O(n^2)"],
-        correctAnswer: "O(n)",
-      },
-      {
-        submissionId,
-        question: "Why did you choose this data structure?",
-        type: "SHORT_ANSWER",
-        correctAnswer: "To optimize space complexity.",
-      },
-    ],
-  });
-
-  return NextResponse.json({ message: "Viva generated", count: 2 });
 }
