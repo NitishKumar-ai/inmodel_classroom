@@ -48,7 +48,7 @@ model Enrollment {
   id        String   @id @default(cuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id])
-  courseId  String
+  courseId   String
   course    Course   @relation(fields: [courseId], references: [id])
   createdAt DateTime @default(now())
 
@@ -60,8 +60,9 @@ model Assignment {
   title       String
   description String
   starterCode String
+  language    String     @default("python")
   deadline    DateTime
-  courseId    String
+  courseId     String
   course      Course     @relation(fields: [courseId], references: [id])
   testCases   TestCase[]
   submissions Submission[]
@@ -84,7 +85,14 @@ model Submission {
   assignmentId String
   assignment   Assignment       @relation(fields: [assignmentId], references: [id])
   code         String
+  language     String           @default("python")
   score        Float?
+  vivaScore    Float?
+  finalScore   Float?
+  manualScore  Float?
+  manualNote   String?
+  testResults  Json?
+  flags        Json?
   status       SubmissionStatus @default(PENDING)
   submittedAt  DateTime         @default(now())
   vivaQuestions VivaQuestion[]
@@ -97,8 +105,9 @@ model VivaQuestion {
   submission    Submission       @relation(fields: [submissionId], references: [id])
   question      String
   type          VivaQuestionType
-  options       Json?            // For MCQ
+  options       Json?
   correctAnswer String
+  conceptTested String?
   responses     VivaResponse[]
 }
 
@@ -110,4 +119,6 @@ model VivaResponse {
   submission     Submission   @relation(fields: [submissionId], references: [id])
   studentAnswer  String
   isCorrect      Boolean
+  aiScore        Int?
+  aiFeedback     String?
 }
