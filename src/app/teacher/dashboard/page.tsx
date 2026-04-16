@@ -87,14 +87,30 @@ export default async function TeacherDashboard() {
       </div>
 
       {/* Course cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {courses.length > 0 ? (
           courses.map((course) => (
-            <div key={course.id} className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-              <h2 className="text-lg font-semibold text-slate-800">{course.title}</h2>
-              <div className="flex gap-4 text-sm text-slate-500 mt-2">
-                <span>{course._count.enrollments} Students</span>
-                <span>{course._count.assignments} Assignments</span>
+            <div key={course.id} className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition flex flex-col justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-slate-800">{course.title}</h2>
+                <div className="flex gap-4 text-sm text-slate-500 mt-2">
+                  <span>{course._count.enrollments} Students</span>
+                  <span>{course._count.assignments} Assignments</span>
+                </div>
+              </div>
+              <div className="flex gap-3 mt-6 border-t pt-4 border-slate-50">
+                <Link
+                  href={`/teacher/analytics/${course.id}`}
+                  className="flex-1 text-center py-2 text-xs font-bold text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition"
+                >
+                  Analytics
+                </Link>
+                <Link
+                  href={`/teacher/export/${course.id}`}
+                  className="flex-1 text-center py-2 text-xs font-bold text-slate-600 bg-slate-50 rounded-lg hover:bg-slate-100 transition"
+                >
+                  Export
+                </Link>
               </div>
             </div>
           ))
@@ -107,8 +123,11 @@ export default async function TeacherDashboard() {
 
       {/* Submissions table */}
       <div>
-        <h2 className="text-2xl font-semibold text-slate-900 mb-4">All Submissions</h2>
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        <div className="flex justify-between items-end mb-4">
+          <h2 className="text-2xl font-semibold text-slate-900">All Submissions</h2>
+          <p className="text-sm text-slate-500">Review and grade student work</p>
+        </div>
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           {allSubmissions.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
@@ -118,39 +137,63 @@ export default async function TeacherDashboard() {
                     <th className="px-5 py-3 text-xs font-semibold text-slate-500 uppercase">Assignment</th>
                     <th className="px-5 py-3 text-xs font-semibold text-slate-500 uppercase text-center">Code</th>
                     <th className="px-5 py-3 text-xs font-semibold text-slate-500 uppercase text-center">Viva</th>
+                    <th className="px-5 py-3 text-xs font-semibold text-slate-500 uppercase text-center">Peer</th>
                     <th className="px-5 py-3 text-xs font-semibold text-slate-500 uppercase text-center">Final</th>
                     <th className="px-5 py-3 text-xs font-semibold text-slate-500 uppercase text-center">Status</th>
                     <th className="px-5 py-3 text-xs font-semibold text-slate-500 uppercase text-center">Flags</th>
+                    <th className="px-5 py-3 text-xs font-semibold text-slate-500 uppercase text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {allSubmissions.map((sub) => {
                     const flags = (sub.flags as string[]) || [];
+                    const plagiarismFlags = (sub.plagiarismFlags as any[]) || [];
+                    const hasPlagiarism = plagiarismFlags.length > 0;
+
                     return (
-                      <tr key={sub.id} className="hover:bg-slate-50 transition">
+                      <tr key={sub.id} className="hover:bg-slate-50 transition group">
                         <td className="px-5 py-3">
-                          <Link href={`/teacher/submission/${sub.id}`} className="text-indigo-600 hover:underline font-medium">
+                          <Link href={`/teacher/submission/${sub.id}`} className="text-indigo-600 hover:underline font-medium block">
                             {sub.student.name || sub.student.email}
                           </Link>
+                          <span className="text-[10px] text-slate-400">{new Date(sub.submittedAt).toLocaleDateString()}</span>
                         </td>
-                        <td className="px-5 py-3 text-slate-600">{sub.assignmentTitle}</td>
+                        <td className="px-5 py-3 text-slate-600 truncate max-w-[150px]">{sub.assignmentTitle}</td>
                         <td className="px-5 py-3 text-center"><ScoreBadge score={sub.score} /></td>
                         <td className="px-5 py-3 text-center"><ScoreBadge score={sub.vivaScore} /></td>
+                        <td className="px-5 py-3 text-center"><ScoreBadge score={sub.peerScore} /></td>
                         <td className="px-5 py-3 text-center">
                           <ScoreBadge score={sub.manualScore ?? sub.finalScore} />
                         </td>
                         <td className="px-5 py-3 text-center">
-                          <span className={`text-xs font-semibold px-2 py-0.5 rounded ${
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-tighter ${
                             sub.status === "GRADED"
                               ? "bg-emerald-50 text-emerald-600"
-                              : "bg-slate-100 text-slate-500"
+                              : sub.status === "PLAGIARIZED"
+                                ? "bg-red-50 text-red-600 border border-red-100"
+                                : "bg-slate-100 text-slate-500"
                           }`}>
                             {sub.status}
                           </span>
                         </td>
-                        <td className="px-5 py-3 text-center space-x-1">
-                          <FlagIcon flags={flags} />
-                          <SuspiciousBadge score={sub.score} vivaScore={sub.vivaScore} />
+                        <td className="px-5 py-3 text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            <FlagIcon flags={flags} />
+                            {hasPlagiarism && (
+                              <Link href={`/teacher/plagiarism/${sub.assignmentId}`} title="Plagiarism detected" className="text-red-500 animate-pulse">
+                                🚨
+                              </Link>
+                            )}
+                            <SuspiciousBadge score={sub.score} vivaScore={sub.vivaScore} />
+                          </div>
+                        </td>
+                        <td className="px-5 py-3 text-right">
+                          <Link
+                            href={`/teacher/submission/${sub.id}`}
+                            className="bg-white border border-slate-200 text-slate-600 px-3 py-1 rounded-md text-xs font-bold hover:bg-slate-50 opacity-0 group-hover:opacity-100 transition shadow-sm"
+                          >
+                            Review
+                          </Link>
                         </td>
                       </tr>
                     );
