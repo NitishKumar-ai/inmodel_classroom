@@ -205,3 +205,198 @@ Score this answer 0-2 and provide brief feedback.`;
     return { score: 0, feedback: "AI evaluation failed. Manual review required." };
   }
 }
+
+// ---------------------------------------------------------------------------
+// Assignment Generation (AI-assisted)
+// ---------------------------------------------------------------------------
+
+export interface GeneratedAssignment {
+  title: string;
+  description: string;
+  starterCode: string;
+  testCases: { input: string; expectedOutput: string; isHidden: boolean }[];
+  hints: string[];
+}
+
+export async function generateAssignment(
+  difficulty: string,
+  concepts: string[],
+  priorAssignments: string[],
+  language: string = "python"
+): Promise<GeneratedAssignment> {
+  const systemPrompt = `You are an expert CS instructor creating coding assignments. Respond with ONLY valid JSON. No markdown, no explanation.`;
+
+  const userPrompt = `Create a ${difficulty} level coding assignment in ${language}.
+
+Concepts to test: ${concepts.join(", ")}
+Prior assignments in this course: ${priorAssignments.join(", ") || "None yet"}
+
+Return JSON:
+{
+  "title": "Assignment title",
+  "description": "Clear problem description with examples",
+  "starterCode": "starter code template with TODO comments",
+  "testCases": [
+    { "input": "test input", "expectedOutput": "expected output", "isHidden": false },
+    { "input": "hidden test", "expectedOutput": "expected", "isHidden": true }
+  ],
+  "hints": ["hint 1", "hint 2"]
+}
+
+Include at least 3 visible and 2 hidden test cases.`;
+
+  try {
+    const response = await anthropic.messages.create({
+      model: MODEL,
+      max_tokens: 4096,
+      system: systemPrompt,
+      messages: [{ role: "user", content: userPrompt }],
+    });
+
+    const content = response.content[0];
+    if (content.type !== "text") throw new Error("Unexpected content type");
+
+    let jsonStr = content.text.trim();
+    if (jsonStr.startsWith("```")) {
+      jsonStr = jsonStr.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
+    }
+
+    return JSON.parse(jsonStr);
+  } catch (error) {
+    console.error("[Claude] Assignment generation failed:", error);
+    return {
+      title: "Practice Problem",
+      description: `A ${difficulty} level problem covering: ${concepts.join(", ")}`,
+      starterCode: `# TODO: Implement your solution\n`,
+      testCases: [{ input: "", expectedOutput: "", isHidden: false }],
+      hints: ["Think about edge cases"],
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Remedial Assignment Generation
+// ---------------------------------------------------------------------------
+
+export async function generateRemedialAssignment(
+  originalTitle: string,
+  originalDescription: string,
+  studentScore: number,
+  language: string = "python"
+): Promise<GeneratedAssignment> {
+  const systemPrompt = `You are an expert CS instructor. A student scored ${studentScore}% on an assignment. Create an easier version to help them learn. Respond with ONLY valid JSON.`;
+
+  const userPrompt = `Original assignment:
+Title: ${originalTitle}
+Description: ${originalDescription}
+
+The student scored only ${studentScore}%. Generate a simpler version that:
+- Breaks the problem into smaller steps
+- Provides more starter code
+- Has simpler test cases
+- Includes hints for each step
+
+Return JSON with same structure:
+{ "title": "Practice: ${originalTitle}", "description": "...", "starterCode": "...", "testCases": [...], "hints": [...] }`;
+
+  try {
+    const response = await anthropic.messages.create({
+      model: MODEL,
+      max_tokens: 4096,
+      system: systemPrompt,
+      messages: [{ role: "user", content: userPrompt }],
+    });
+
+    const content = response.content[0];
+    if (content.type !== "text") throw new Error("Unexpected content type");
+
+    let jsonStr = content.text.trim();
+    if (jsonStr.startsWith("```")) {
+      jsonStr = jsonStr.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
+    }
+
+    return JSON.parse(jsonStr);
+  } catch (error) {
+    console.error("[Claude] Remedial generation failed:", error);
+    return {
+      title: `Practice: ${originalTitle}`,
+      description: `A simpler version of:\n${originalDescription}`,
+      starterCode: `# Practice version - follow the steps\n# Step 1: ...\n`,
+      testCases: [{ input: "", expectedOutput: "", isHidden: false }],
+      hints: ["Start with the simplest case first"],
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Peer Review Rubric Generation
+// ---------------------------------------------------------------------------
+
+export async function generatePeerRubric(
+  assignmentDescription: string
+): Promise<{ criterion: string; maxScore: number }[]> {
+  const systemPrompt = `You are a CS instructor. Generate a peer review rubric. Respond with ONLY a JSON array.`;
+
+  const userPrompt = `Assignment: ${assignmentDescription}
+
+Generate a rubric for peer code review as a JSON array:
+[
+  { "criterion": "Correctness", "maxScore": 3 },
+  { "criterion": "Code Readability", "maxScore": 2 },
+  ...
+]
+
+Include 3-5 criteria. Max total score should be around 10.`;
+
+  try {
+    const response = await anthropic.messages.create({
+      model: MODEL,
+      max_tokens: 512,
+      system: systemPrompt,
+      messages: [{ role: "user", content: userPrompt }],
+    });
+
+    const content = response.content[0];
+    if (content.type !== "text") throw new Error("Unexpected");
+
+    let jsonStr = content.text.trim();
+    if (jsonStr.startsWith("```")) {
+      jsonStr = jsonStr.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
+    }
+
+    return JSON.parse(jsonStr);
+  } catch {
+    return [
+      { criterion: "Correctness", maxScore: 3 },
+      { criterion: "Readability", maxScore: 2 },
+      { criterion: "Edge cases handled", maxScore: 2 },
+      { criterion: "Code efficiency", maxScore: 2 },
+    ];
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Study Suggestion for Weak Concepts
+// ---------------------------------------------------------------------------
+
+export async function generateStudySuggestion(
+  concept: string,
+  context: string = ""
+): Promise<string> {
+  try {
+    const response = await anthropic.messages.create({
+      model: MODEL,
+      max_tokens: 512,
+      system: "You are a helpful CS tutor. Give a brief, actionable study suggestion in 2-3 sentences.",
+      messages: [{
+        role: "user",
+        content: `A student is weak in: "${concept}". ${context ? `Context: ${context}` : ""}\n\nGive a brief study suggestion with a specific practice exercise they can try.`,
+      }],
+    });
+
+    const content = response.content[0];
+    return content.type === "text" ? content.text.trim() : "Review the fundamentals of this concept.";
+  } catch {
+    return `Practice more problems related to ${concept}. Focus on understanding the core principles before tackling complex variations.`;
+  }
+}
